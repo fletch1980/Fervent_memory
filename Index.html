@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fervent – Scripture Memory</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #f9f5ff; font-family: Georgia, serif; }
+    #root { max-width: 480px; margin: 0 auto; min-height: 100vh; padding-bottom: 40px; }
+    button { font-family: Georgia, serif; cursor: pointer; }
+    input { font-family: Georgia, serif; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState } = React;
+
+const VERSES = [
+  { id:1,  title:"Prayer Is War",           focus:"The Enemy",         ref:"Ephesians 6:12",       text:"For our struggle is not against flesh and blood, but against the rulers, against the authorities, against the powers of this dark world and against the spiritual forces of evil in the heavenly realms." },
+  { id:2,  title:"Know Your Enemy",          focus:"Spiritual Warfare", ref:"1 Peter 5:8",          text:"Be sober-minded; be watchful. Your adversary the devil prowls around like a roaring lion, seeking someone to devour." },
+  { id:3,  title:"Sealed with Prayer",       focus:"Your Focus",        ref:"Colossians 3:2",       text:"Set your minds on things that are above, not on things that are on earth." },
+  { id:4,  title:"The Fervency Factor",      focus:"Your Identity",     ref:"Romans 8:37",          text:"No, in all these things we are more than conquerors through him who loved us." },
+  { id:5,  title:"Winning the War Within",   focus:"Your Family",       ref:"Joshua 24:15",         text:"But as for me and my household, we will serve the Lord." },
+  { id:6,  title:"Making the Ask",           focus:"Your Past",         ref:"Isaiah 43:18-19",      text:"Forget the former things; do not dwell on the past. See, I am doing a new thing! Now it springs up; do you not perceive it?" },
+  { id:7,  title:"The Grind",                focus:"Your Fears",        ref:"2 Timothy 1:7",        text:"For God gave us a spirit not of fear but of power and love and self-control." },
+  { id:8,  title:"A Passionate Appeal",      focus:"Your Purity",       ref:"Psalm 51:10",          text:"Create in me a clean heart, O God, and renew a right spirit within me." },
+  { id:9,  title:"Your Calling",             focus:"Your Purpose",      ref:"Jeremiah 29:11",       text:"For I know the plans I have for you, declares the Lord, plans for welfare and not for evil, to give you a future and a hope." },
+  { id:10, title:"The Privilege of Prayer",  focus:"Your Relationships", ref:"1 Corinthians 13:4-5", text:"Love is patient and kind; love does not envy or boast; it is not arrogant or rude. It does not insist on its own way; it is not irritable or resentful." },
+  { id:11, title:"Praying for Others",       focus:"Others",            ref:"James 5:16",           text:"Therefore, confess your sins to one another and pray for one another, that you may be healed. The prayer of a righteous person has great power as it is working." },
+  { id:12, title:"A Warrior's Manifesto",    focus:"Your Faith",        ref:"Hebrews 11:1",         text:"Now faith is the assurance of things hoped for, the conviction of things not seen." },
+];
+
+const COLORS = ["#7C3AED","#6D28D9","#8B5CF6","#9333EA","#7C3AED","#6D28D9","#8B5CF6","#9333EA","#7C3AED","#6D28D9","#8B5CF6","#9333EA"];
+const STORE_KEY = "fervent-memory-v1";
+
+const shuffleArr = (arr) => [...arr].sort(()=>Math.random()-0.5);
+const clean = (s) => s.toLowerCase().replace(/[^a-z]/g,"");
+const buildBlanks = (text) => {
+  const words = text.split(" ");
+  const count = Math.ceil(words.length * 0.35);
+  const indices = new Set(shuffleArr([...Array(words.length).keys()]).slice(0,count));
+  return words.map((word,i)=>({word,blanked:indices.has(i)}));
+};
+
+const load = () => { try { const r = localStorage.getItem(STORE_KEY); return r ? JSON.parse(r) : {}; } catch { return {}; } };
+const persist = (d) => { try { localStorage.setItem(STORE_KEY, JSON.stringify(d)); } catch {} };
+
+function App() {
+  const [memData, setMemData] = useState(load);
+  const [view, setView] = useState("list");
+  const [selected, setSelected] = useState(null);
+  const [studyMode, setStudyMode] = useState("read");
+  const [covered, setCovered] = useState(false);
+  const [blanks, setBlanks] = useState([]);
+  const [answers, setAnswers] = useState({});
+  const [checked, setChecked] = useState(false);
+  const [quizVerse, setQuizVerse] = useState(null);
+  const [quizOptions, setQuizOptions] = useState([]);
+  const [quizAnswer, setQuizAnswer] = useState(null);
+  const [quizScore, setQuizScore] = useState({correct:0,total:0});
+  const [quizQueue, setQuizQueue] = useState([]);
+  const [quizIdx, setQuizIdx] = useState(0);
+  const [quizDone, setQuizDone] = useState(false);
+
+  const v = VERSES.find(x => x.id === selected);
+  const upd = (u) => { setMemData(u); persist(u); };
+  const toggleMemorized = (id) => upd({...memData,[id]:{...memData[id],memorized:!memData[id]?.memorized}});
+  const memorizedCount = VERSES.filter(x=>memData[x.id]?.memorized).length;
+
+  const startFillIn = (verse) => { setBlanks(buildBlanks(verse.text)); setAnswers({}); setChecked(false); };
+
+  const fillScore = () => {
+    let correct=0, total=0;
+    blanks.forEach((item,i)=>{ if(item.blanked){ total++; if(clean(answers[i]||"")===clean(item.word)) correct++; } });
+    return {correct,total};
+  };
+
+  const setupQuestion = (queue, idx) => {
+    const verse = queue[idx];
+    setQuizVerse(verse);
+    setQuizAnswer(null);
+    const others = shuffleArr(VERSES.filter(x=>x.id!==verse.id)).slice(0,3);
+    setQuizOptions(shuffleArr([verse,...others]));
+  };
+
+  const startQuiz = () => {
+    const queue = shuffleArr(VERSES);
+    setQuizQueue(queue); setQuizIdx(0);
+    setQuizScore({correct:0,total:0}); setQuizDone(false);
+    setupQuestion(queue,0); setView("quiz");
+  };
+
+  const handleQuizAnswer = (opt) => {
+    if (quizAnswer!==null) return;
+    setQuizAnswer(opt.id);
+    setQuizScore(s=>({correct:s.correct+(opt.id===quizVerse.id?1:0),total:s.total+1}));
+  };
+
+  const nextQuestion = () => {
+    const next = quizIdx+1;
+    if (next>=quizQueue.length) { setQuizDone(true); return; }
+    setQuizIdx(next); setupQuestion(quizQueue,next);
+  };
+
+  const goBack = () => {
+    if (view==="study"||view==="quiz") setView("list");
+  };
+
+  return (
+    <div>
+      <div style={{background:"linear-gradient(135deg,#6D28D9,#9333EA)",padding:"24px 16px 18px",color:"white",textAlign:"center",position:"relative"}}>
+        {view==="list" ? (
+          <a href="index.html" style={{position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",background:"rgba(255,255,255,0.2)",borderRadius:8,padding:"5px 12px",fontSize:12,color:"white",textDecoration:"none"}}>🏠</a>
+        ) : (
+          <button onClick={goBack} style={{position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",background:"rgba(255,255,255,0.2)",border:"none",color:"white",borderRadius:8,padding:"5px 12px",fontSize:12}}>← Back</button>
+        )}
+        <div style={{fontSize:10,letterSpacing:3,opacity:0.75,textTransform:"uppercase"}}>Priscilla Shirer</div>
+        <div style={{fontSize:24,fontWeight:"bold",letterSpacing:1}}>FERVENT</div>
+        <div style={{fontSize:11,opacity:0.7,marginTop:1}}>📌 Scripture Memory</div>
+        {view==="list" && <div style={{fontSize:12,opacity:0.8,marginTop:5}}>{memorizedCount} of 12 memorized</div>}
+      </div>
+
+      <div style={{padding:16}}>
+
+        {/* LIST */}
+        {view==="list" && <>
+          <div style={{background:"white",borderRadius:20,height:10,marginBottom:4,overflow:"hidden"}}>
+            <div style={{width:`${(memorizedCount/12)*100}%`,height:"100%",background:"linear-gradient(90deg,#6D28D9,#9333EA)",borderRadius:20,transition:"width 0.4s"}}/>
+          </div>
+          <div style={{fontSize:11,color:"#888",textAlign:"right",marginBottom:14}}>{Math.round((memorizedCount/12)*100)}% memorized</div>
+          <button onClick={startQuiz} style={{width:"100%",padding:13,borderRadius:12,border:"none",background:"linear-gradient(135deg,#6D28D9,#9333EA)",color:"white",fontSize:14,fontWeight:"bold",marginBottom:14}}>
+            🎯 Take the Quiz — All 12 Verses
+          </button>
+          {VERSES.map((verse,i)=>(
+            <div key={verse.id} onClick={()=>{setSelected(verse.id);setStudyMode("read");setCovered(false);setView("study");}}
+              style={{background:"white",borderRadius:12,padding:"12px 14px",marginBottom:8,display:"flex",alignItems:"center",gap:12,cursor:"pointer",boxShadow:"0 1px 4px rgba(0,0,0,0.06)",border:memData[verse.id]?.memorized?"2px solid #7C3AED":"2px solid transparent"}}>
+              <div style={{background:COLORS[i],color:"white",borderRadius:8,width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:"bold",flexShrink:0}}>{verse.id}</div>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:"bold",fontSize:13}}>{verse.ref}</div>
+                <div style={{fontSize:11,color:"#999"}}>{verse.focus}</div>
+              </div>
+              <div style={{fontSize:13,color:memData[verse.id]?.memorized?"#7C3AED":"#ddd"}}>{memData[verse.id]?.memorized?"✓":"›"}</div>
+            </div>
+          ))}
+        </>}
+
+        {/* STUDY */}
+        {view==="study" && v && <>
+          <div style={{background:`linear-gradient(135deg,${COLORS[v.id-1]},#9333EA)`,borderRadius:12,padding:14,color:"white",marginBottom:14}}>
+            <div style={{fontSize:11,opacity:0.75}}>Chapter {v.id} · {v.focus}</div>
+            <div style={{fontSize:18,fontWeight:"bold",margin:"3px 0"}}>{v.ref}</div>
+            <div style={{fontSize:12,opacity:0.8}}>{v.title}</div>
+          </div>
+
+          <div style={{display:"flex",gap:6,marginBottom:14}}>
+            {[["read","📖 Read"],["cover","🫣 Cover"],["fillin","✏️ Fill In"]].map(([k,label])=>(
+              <button key={k} onClick={()=>{setStudyMode(k);if(k==="cover")setCovered(false);if(k==="fillin")startFillIn(v);}}
+                style={{flex:1,padding:"8px 4px",borderRadius:20,border:"none",background:studyMode===k?"#6D28D9":"#f3eeff",color:studyMode===k?"white":"#6D28D9",fontSize:12,fontWeight:studyMode===k?"bold":"normal"}}>{label}</button>
+            ))}
+          </div>
+
+          {studyMode==="read" && (
+            <div style={{background:"white",borderRadius:12,padding:16,boxShadow:"0 1px 4px rgba(0,0,0,0.07)",marginBottom:12}}>
+              <div style={{fontSize:15,color:"#333",lineHeight:2,fontStyle:"italic"}}>{v.text}</div>
+              <div style={{fontSize:12,color:"#9333EA",fontWeight:"bold",marginTop:12}}>— {v.ref}</div>
+            </div>
+          )}
+
+          {studyMode==="cover" && (
+            <div style={{background:"white",borderRadius:12,padding:16,boxShadow:"0 1px 4px rgba(0,0,0,0.07)",marginBottom:12}}>
+              <div style={{fontSize:12,color:"#888",marginBottom:10}}>Read the reference, recall the verse from memory, then reveal it.</div>
+              <div style={{fontSize:16,fontWeight:"bold",color:"#6D28D9",marginBottom:14,textAlign:"center"}}>{v.ref}</div>
+              {!covered ? (
+                <button onClick={()=>setCovered(true)} style={{width:"100%",padding:12,borderRadius:10,border:"2px dashed #a78bfa",background:"#f9f5ff",color:"#6D28D9",fontSize:13}}>Tap to Reveal Verse</button>
+              ) : (
+                <div style={{fontSize:15,color:"#333",lineHeight:2,fontStyle:"italic"}}>{v.text}</div>
+              )}
+            </div>
+          )}
+
+          {studyMode==="fillin" && (
+            <div style={{background:"white",borderRadius:12,padding:16,boxShadow:"0 1px 4px rgba(0,0,0,0.07)",marginBottom:12}}>
+              <div style={{fontSize:12,color:"#888",marginBottom:12}}>Fill in the missing words from memory.</div>
+              <div style={{fontSize:14,lineHeight:2.6,color:"#333"}}>
+                {blanks.map((item,i)=>{
+                  if (!item.blanked) return <span key={i}>{item.word} </span>;
+                  const isCorrect = checked && clean(answers[i]||"")===clean(item.word);
+                  const isWrong = checked && (answers[i]||"").trim()!=="" && clean(answers[i])!==clean(item.word);
+                  return (
+                    <span key={i} style={{display:"inline-block",marginRight:4,verticalAlign:"bottom"}}>
+                      <input value={answers[i]||""} onChange={e=>setAnswers(a=>({...a,[i]:e.target.value}))} disabled={checked}
+                        style={{width:Math.max(item.word.length*10,48),border:"none",borderBottom:`2px solid ${isCorrect?"#22c55e":isWrong?"#ef4444":"#7C3AED"}`,background:isCorrect?"#f0fdf4":isWrong?"#fef2f2":"transparent",fontSize:14,color:"#333",textAlign:"center",outline:"none",padding:"0 2px"}}/>
+                      {isWrong && <div style={{fontSize:10,color:"#22c55e",textAlign:"center"}}>{item.word}</div>}
+                    </span>
+                  );
+                })}
+              </div>
+              {!checked ? (
+                <button onClick={()=>setChecked(true)} style={{width:"100%",padding:12,borderRadius:10,border:"none",background:"#6D28D9",color:"white",fontSize:13,marginTop:14}}>Check My Answers</button>
+              ) : (()=>{
+                const s = fillScore();
+                return (
+                  <div style={{textAlign:"center",marginTop:14}}>
+                    <div style={{fontSize:22,fontWeight:"bold",color:s.correct===s.total?"#22c55e":"#6D28D9"}}>{s.correct}/{s.total}</div>
+                    <div style={{fontSize:12,color:"#888",marginBottom:8}}>{s.correct===s.total?"Perfect! 🎉":"Keep practicing!"}</div>
+                    <button onClick={()=>startFillIn(v)} style={{padding:"8px 20px",borderRadius:8,border:"none",background:"#f3eeff",color:"#6D28D9",fontSize:12}}>Try Again</button>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
+          <button onClick={()=>toggleMemorized(v.id)}
+            style={{width:"100%",padding:13,borderRadius:12,border:memData[v.id]?.memorized?"none":"2px solid #a78bfa",background:memData[v.id]?.memorized?"#6D28D9":"white",color:memData[v.id]?.memorized?"white":"#6D28D9",fontSize:13,fontWeight:"bold"}}>
+            {memData[v.id]?.memorized?"✓ Memorized!":"Mark as Memorized"}
+          </button>
+        </>}
+
+        {/* QUIZ */}
+        {view==="quiz" && !quizDone && quizVerse && (
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+              <div style={{fontSize:13,color:"#888"}}>Question {quizIdx+1} of {quizQueue.length}</div>
+              <div style={{fontSize:13,color:"#6D28D9",fontWeight:"bold"}}>{quizScore.correct}/{quizScore.total} correct</div>
+            </div>
+            <div style={{background:"white",borderRadius:12,padding:16,marginBottom:14,boxShadow:"0 1px 4px rgba(0,0,0,0.07)"}}>
+              <div style={{fontSize:11,color:"#9333EA",fontWeight:"bold",letterSpacing:1,marginBottom:8}}>WHICH REFERENCE MATCHES THIS VERSE?</div>
+              <div style={{fontSize:14,color:"#333",lineHeight:1.9,fontStyle:"italic"}}>{quizVerse.text}</div>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {quizOptions.map(opt=>{
+                const isSel=quizAnswer===opt.id, isCorr=opt.id===quizVerse.id;
+                let bg="white",border="2px solid #e0d4ff",color="#333";
+                if (quizAnswer!==null) {
+                  if (isCorr) { bg="#f0fdf4"; border="2px solid #22c55e"; color="#166534"; }
+                  else if (isSel) { bg="#fef2f2"; border="2px solid #ef4444"; color="#991b1b"; }
+                }
+                return (
+                  <button key={opt.id} onClick={()=>handleQuizAnswer(opt)} disabled={quizAnswer!==null}
+                    style={{padding:"13px 16px",borderRadius:10,border,background:bg,color,fontSize:13,cursor:quizAnswer===null?"pointer":"default",textAlign:"left",fontWeight:(isSel||(quizAnswer!==null&&isCorr))?"bold":"normal"}}>
+                    {opt.ref}
+                  </button>
+                );
+              })}
+            </div>
+            {quizAnswer!==null && (
+              <button onClick={nextQuestion} style={{width:"100%",marginTop:14,padding:13,borderRadius:12,border:"none",background:"linear-gradient(135deg,#6D28D9,#9333EA)",color:"white",fontSize:14,fontWeight:"bold"}}>
+                {quizIdx+1<quizQueue.length?"Next Verse →":"See Results"}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* RESULTS */}
+        {view==="quiz" && quizDone && (
+          <div style={{textAlign:"center"}}>
+            <div style={{background:"linear-gradient(135deg,#6D28D9,#9333EA)",borderRadius:16,padding:24,color:"white",marginBottom:16}}>
+              <div style={{fontSize:48,marginBottom:8}}>{quizScore.correct===12?"🏆":quizScore.correct>=8?"🔥":"📖"}</div>
+              <div style={{fontSize:32,fontWeight:"bold"}}>{quizScore.correct}/12</div>
+              <div style={{fontSize:14,opacity:0.85,marginTop:4}}>{quizScore.correct===12?"Perfect score — Warrior!":quizScore.correct>=8?"Strong work — keep going!":"Keep practicing — you've got this!"}</div>
+            </div>
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={startQuiz} style={{flex:1,padding:13,borderRadius:12,border:"none",background:"#6D28D9",color:"white",fontSize:13,fontWeight:"bold"}}>Retake Quiz</button>
+              <button onClick={()=>setView("list")} style={{flex:1,padding:13,borderRadius:12,border:"2px solid #a78bfa",background:"white",color:"#6D28D9",fontSize:13,fontWeight:"bold"}}>Back to Verses</button>
+            </div>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
